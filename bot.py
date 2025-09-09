@@ -4,8 +4,8 @@ from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.constants import ParseMode
 
-TOKEN = "YOUR_BOT_TOKEN"  # BotFather token
-CHANNEL_ID = "@your_channel_username"  # Or channel ID like -100xxxxxxxxxx
+TOKEN = "8330541351:AAEFleMbw_y6VOGBep0bDXrvDDeIhAAYj7o"  # BotFather token
+CHANNEL_ID = "-1002912079466"  # Or channel ID like -100xxxxxxxxxx
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send me a sticker pack link like:\n`/get https://t.me/addstickers/PackName`", parse_mode=ParseMode.MARKDOWN)
