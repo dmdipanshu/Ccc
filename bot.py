@@ -1,53 +1,99 @@
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import re
 
-import os
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, ContextTypes
-from telegram.constants import ParseMode
+# Set up logging to see what your bot is doing
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
-TOKEN = "8330541351:AAEFleMbw_y6VOGBep0bDXrvDDeIhAAYj7o"  # BotFather token
-CHANNEL_ID = "-1002912079466"  # Or channel ID like -100xxxxxxxxxx
+# --- Configuration ---
+# You must replace these with your actual values.
+# Get your bot token from @BotFather on Telegram.
+BOT_TOKEN = "8330541351:AAEFleMbw_y6VOGBep0bDXrvDDeIhAAYj7o"
 
+# The unique identifier for your Telegram channel.
+# To find your channel ID, you can forward any message from your channel to the @RawDataBot.
+# It will provide the chat_id in the message details, which will be a negative number.
+CHANNEL_ID = -1002912079466
+
+# --- Bot Commands ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me a sticker pack link like:\n`/get https://t.me/addstickers/PackName`", parse_mode=ParseMode.MARKDOWN)
+    """Sends a welcome message and explains how to use the bot."""
+    user = update.effective_user
+    await update.message.reply_html(
+        f"Hi {user.mention_html()}! I'm a bot that can download a sticker pack and upload all its stickers to a channel. To use me, type /download_stickers followed by the link to the sticker pack.\n\n"
+        f"Example: /download_stickers https://t.me/addstickers/animals\n\n"
+        f"Please note that the bot needs to be an administrator in the channel where you want to send the stickers.",
+    )
 
-async def get_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Downloads all stickers from a given sticker pack URL and uploads them
+    to the specified channel.
+    """
+    # Check if a sticker pack URL was provided
     if not context.args:
-        await update.message.reply_text("❌ Please provide a sticker pack link!\nUsage: `/get <link>`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("Please provide a sticker pack URL after the command.")
         return
 
-    link = context.args[0]
-    if not link.startswith("https://t.me/addstickers/"):
-        await update.message.reply_text("❌ Invalid link! Must be a Telegram sticker pack link.")
+    sticker_pack_url = context.args[0]
+    
+    # Use a regular expression to extract the sticker set name from the URL
+    match = re.search(r't\.me/addstickers/(.*)', sticker_pack_url)
+    if not match:
+        await update.message.reply_text("Invalid sticker pack URL. Please use a link like 'https://t.me/addstickers/StickerPackName'.")
         return
 
-    pack_name = link.split("/")[-1]
+    sticker_set_name = match.group(1)
 
-    # Fetch sticker set
-    sticker_set = await context.bot.get_sticker_set(pack_name)
+    await update.message.reply_text(f"Fetching stickers from the pack '{sticker_set_name}'...")
 
-    await update.message.reply_text(f"📦 Downloading {len(sticker_set.stickers)} stickers from *{sticker_set.title}* …", parse_mode=ParseMode.MARKDOWN)
+    try:
+        # Get the sticker set object from the Telegram API
+        sticker_set = await context.bot.get_sticker_set(name=sticker_set_name)
+        stickers_count = len(sticker_set.stickers)
+        
+        await update.message.reply_text(f"Found {stickers_count} stickers. Starting to upload them to the channel...")
 
-    for idx, sticker in enumerate(sticker_set.stickers, start=1):
-        # Download sticker file
-        file = await context.bot.get_file(sticker.file_id)
-        file_path = f"sticker_{idx}.webp"
-        await file.download_to_drive(file_path)
+        # Loop through each sticker in the set and send it to the channel
+        for sticker in sticker_set.stickers:
+            await context.bot.send_sticker(chat_id=CHANNEL_ID, sticker=sticker.file_id)
 
-        # Upload to channel
-        await context.bot.send_document(chat_id=CHANNEL_ID, document=InputFile(file_path), caption=f"Sticker {idx}/{len(sticker_set.stickers)}")
+        await update.message.reply_text("All stickers have been successfully uploaded to the channel!")
 
-        os.remove(file_path)  # cleanup
-
-    await update.message.reply_text("✅ All stickers uploaded to channel!")
+    except TypeError as e:
+        # This specific error handler is for the version mismatch issue
+        logging.error(f"A TypeError occurred: {e}")
+        await update.message.reply_text(
+            "It looks like your python-telegram-bot library is out of date. "
+            "Please update it by running: `pip install --upgrade python-telegram-bot`"
+        )
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        await update.message.reply_text(f"An unexpected error occurred while processing your request: {e}")
+        # Send a more user-friendly error message for common issues
+        if "sticker set is not found" in str(e):
+            await update.message.reply_text("Could not find the sticker pack. Please double-check the URL.")
+        elif "bot is not an administrator" in str(e):
+            await update.message.reply_text("I cannot send messages to that channel. Please make sure I'm an administrator with the 'Post Messages' permission.")
 
 def main():
-    app = Application.builder().token(TOKEN).build()
+    """Starts the bot."""
+    # Build the Application and pass it your bot's token.
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Register command handlers
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("get", get_stickers))
+    app.add_handler(CommandHandler("download_stickers", download_stickers))
 
-    print("Bot is running...")
+    # Run the bot
+    logging.info("Bot is running...")
     app.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
+
