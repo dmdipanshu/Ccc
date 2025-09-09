@@ -2,6 +2,7 @@ import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import re
+import asyncio
 
 # Set up logging to see what your bot is doing
 logging.basicConfig(
@@ -60,8 +61,11 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Found {stickers_count} stickers. Starting to upload them to the channel...")
 
         # Loop through each sticker in the set and send it to the channel
-        for sticker in sticker_set.stickers:
+        for i, sticker in enumerate(sticker_set.stickers):
+            # Add a small delay between sending each sticker to avoid flood control errors.
             await context.bot.send_sticker(chat_id=CHANNEL_ID, sticker=sticker.file_id)
+            if i < stickers_count - 1:
+                await asyncio.sleep(0.5)  # Sleep for 0.5 seconds
 
         await update.message.reply_text("All stickers have been successfully uploaded to the channel!")
 
